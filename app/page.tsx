@@ -20,6 +20,7 @@ const STORAGE_KEY = "todos_v1";
 export default function Home() {
   const [tab, setTab] = useState<"home" | "todo">("home");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<"all" | "open" | "done" | "high">("all");
   const [title, setTitle] = useState("");
@@ -27,23 +28,22 @@ export default function Home() {
   const [priority, setPriority] = useState<Priority>("normal");
   const [notes, setNotes] = useState("");
 
-  // ---- auth: show email and auto-switch to Todo when logged in
-useEffect(() => {
-  fetch("/api/me")
-    .then(async (r) => (r.ok ? (await r.json()) as Me : ({} as Me)))
-    .then((d) => {
-      if (d.email) {
-        setUserEmail(d.email);
-        setTab("todo"); // auto-switch to todo when logged in
-      } else {
-        setUserEmail(null);
-      }
-    })
-    .catch(() => setUserEmail(null));
-}, []);
+  // ----- auth: read /api/me, show email, and auto-switch to Todo when logged in
+  useEffect(() => {
+    fetch("/api/me")
+      .then(async (r) => (r.ok ? (await r.json()) as Me : ({} as Me)))
+      .then((d) => {
+        if (d.email) {
+          setUserEmail(d.email);
+          setTab("todo");
+        } else {
+          setUserEmail(null);
+        }
+      })
+      .catch(() => setUserEmail(null));
+  }, []);
 
-
-  // ---- load/save tasks locally
+  // ----- load/save tasks locally
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -77,44 +77,66 @@ useEffect(() => {
       created_at: new Date().toISOString(),
     };
     setTasks((prev) => [t, ...prev]);
-    setTitle(""); setNotes(""); setPriority("normal"); setDue("");
+    setTitle("");
+    setNotes("");
+    setPriority("normal");
+    setDue("");
   }
   function del(id: number) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }
   function toggle(id: number) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+    );
   }
   function edit(id: number) {
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
     const newTitle = window.prompt("Edit title", t.title) ?? t.title;
     const newNotes = window.prompt("Edit notes", t.notes) ?? t.notes;
-    setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, title: newTitle.trim(), notes: newNotes.trim() } : x)));
+    setTasks((prev) =>
+      prev.map((x) =>
+        x.id === id
+          ? { ...x, title: newTitle.trim(), notes: newNotes.trim() }
+          : x
+      )
+    );
   }
 
-  // page background like before: white on Home, black on Todo
-  const pageBg = tab === "home" ? "bg-gray-100 text-black" : "bg-neutral-950 text-white";
+  // Backgrounds to match your preferred look
+  const pageBg =
+    tab === "home"
+      ? "bg-gray-100 text-black"
+      : "bg-neutral-950 text-white"; // dark for Todo
 
   return (
     <main className={`min-h-screen ${pageBg}`}>
-      {/* Top bar (simple, keeps your old vibe) */}
+      {/* Top bar */}
       <header className="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-900/70 backdrop-blur">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setTab("home")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium
-              ${tab === "home" ? "bg-gray-200 text-black" : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"}`}
-          >
-            Home
-          </button>
-          <button
-            onClick={() => setTab("todo")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium
-              ${tab === "todo" ? "bg-neutral-800 text-white" : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"}`}
-          >
-            Todo
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTab("home")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                tab === "home"
+                  ? "bg-gray-200 text-black"
+                  : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
+              }`}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => setTab("todo")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                tab === "todo"
+                  ? "bg-neutral-800 text-white"
+                  : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
+              }`}
+            >
+              Todo
+            </button>
+          </div>
 
           <div className="ml-auto flex items-center gap-2">
             {userEmail && (
@@ -125,7 +147,7 @@ useEffect(() => {
             {userEmail ? (
               <a
                 href="/api/logout"
-                className="px-3 py-1.5 rounded-md bg-neutral-900 text-white hover:bg-black dark:bg-neutral-800 dark:hover:bg-neutral-700 text-sm"
+                className="px-3 py-1.5 rounded-md bg-neutral-800 text-white hover:bg-neutral-700 text-sm"
               >
                 Logout
               </a>
@@ -141,7 +163,7 @@ useEffect(() => {
         </div>
       </header>
 
-      {/* HOME (white, centered like before) */}
+      {/* HOME */}
       {tab === "home" && (
         <section className="min-h-[80vh] flex items-center justify-center">
           <div className="text-center px-4">
@@ -153,7 +175,7 @@ useEffect(() => {
         </section>
       )}
 
-      {/* TODO (dark) — higher contrast card + inputs so it’s easy to see */}
+      {/* TODO */}
       {tab === "todo" && (
         <section className="mx-auto max-w-4xl px-4 py-8">
           <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-5 shadow-2xl">
@@ -209,12 +231,19 @@ useEffect(() => {
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg border text-sm
-                    ${filter === f
+                  className={`px-3 py-1.5 rounded-lg border text-sm ${
+                    filter === f
                       ? "border-blue-400 text-blue-300 bg-blue-400/10"
-                      : "border-white/15 text-white/80 hover:bg-white/5"}`}
+                      : "border-white/15 text-white/80 hover:bg-white/5"
+                  }`}
                 >
-                  {f === "all" ? "All" : f === "open" ? "Open" : f === "done" ? "Completed" : "High Priority"}
+                  {f === "all"
+                    ? "All"
+                    : f === "open"
+                    ? "Open"
+                    : f === "done"
+                    ? "Completed"
+                    : "High Priority"}
                 </button>
               ))}
             </div>
@@ -224,10 +253,11 @@ useEffect(() => {
               {view.map((t) => (
                 <li
                   key={t.id}
-                  className={`rounded-xl p-3 border
-                    ${t.completed
+                  className={`rounded-xl p-3 border ${
+                    t.completed
                       ? "bg-neutral-800/70 border-white/10 opacity-80"
-                      : "bg-neutral-800 border-white/10"}`}
+                      : "bg-neutral-800 border-white/10"
+                  }`}
                 >
                   <div className="grid grid-cols-[28px_1fr_auto_auto_auto] gap-3 items-center">
                     <input
@@ -240,10 +270,16 @@ useEffect(() => {
                     <span className="text-xs text-white/60">
                       {t.priority.toUpperCase()} {t.due ? `• due ${t.due}` : ""}
                     </span>
-                    <button className="underline text-sm text-blue-300 hover:text-blue-200" onClick={() => edit(t.id)}>
+                    <button
+                      className="underline text-sm text-blue-300 hover:text-blue-200"
+                      onClick={() => edit(t.id)}
+                    >
                       Edit
                     </button>
-                    <button className="underline text-sm text-rose-300 hover:text-rose-200" onClick={() => del(t.id)}>
+                    <button
+                      className="underline text-sm text-rose-300 hover:text-rose-200"
+                      onClick={() => del(t.id)}
+                    >
                       Delete
                     </button>
                   </div>

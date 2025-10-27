@@ -1,40 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { WorkOS } from "@workos-inc/node";
 
-export const runtime = "nodejs";
+export async function GET(req: Request) {
+  const apiKey = process.env.WORKOS_API_KEY!;
+  const clientId = process.env.WORKOS_CLIENT_ID!;
+  const base = (process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin).replace(/\/$/, "");
 
-const apiKey = process.env.WORKOS_API_KEY!;
-const clientId = process.env.WORKOS_CLIENT_ID!;
-
-export async function GET(req: NextRequest) {
-  const origin = req.nextUrl.origin;
+  const code = new URL(req.url).searchParams.get("code");
+  if (!code) return NextResponse.redirect(`${base}/?error=missing_code`);
 
   try {
-    const code = req.nextUrl.searchParams.get("code");
-    if (!code) {
-      console.error("[callback] missing code");
-      return NextResponse.redirect(`${origin}/?error=missing_code`);
-    }
-
     const workos = new WorkOS(apiKey);
-    const { user } = await workos.userManagement.authenticateWithCode({
-      code,
-      clientId,
-    });
+    const { user } = await workos.userManagement.authenticateWithCode({ code, clientId });
 
-    console.log("[callback] user:", user);
-
-    // Create a response and set the cookie with the user email
-    const res = NextResponse.redirect(`${origin}/?login=success`);
-    res.cookies.set("user_email", user?.email ?? "", {
-      httpOnly: false,
+    const res = NextResponse.redirect(`${base}/?login=success`);
+    // IMPORTANT: cookie name must match /api/me
+    res.cookies.set("user", user.email ?? "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: base.startsWith("https://"), // true on Vercel, false locally
       path: "/",
-      maxAge: 60 * 60 * 24, // 1 day
+      maxAge: 60 * 60 * 24 * 7,
     });
-
     return res;
   } catch (e) {
-    console.error("[callback] error:", e);
-    return NextResponse.redirect(`${origin}/?error=callback_failed`);
+    console.error("[callback] auth failed:", e);
+    return NextResponse.redirect(`${base}/?error=callback_failed`);
   }
 }
