@@ -28,14 +28,15 @@ export default function Home() {
   const [priority, setPriority] = useState<Priority>("normal");
   const [notes, setNotes] = useState("");
 
-  // ----- auth: read /api/me, show email, and auto-switch to Todo when logged in
+  // get current user from cookie (/api/me)
   useEffect(() => {
     fetch("/api/me")
       .then(async (r) => (r.ok ? (await r.json()) as Me : ({} as Me)))
       .then((d) => {
         if (d.email) {
           setUserEmail(d.email);
-          setTab("todo");
+          // you can auto-open todo here if you want:
+          // setTab("todo");
         } else {
           setUserEmail(null);
         }
@@ -43,7 +44,7 @@ export default function Home() {
       .catch(() => setUserEmail(null));
   }, []);
 
-  // ----- load/save tasks locally
+  // load/save todos locally
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -82,6 +83,7 @@ export default function Home() {
     setPriority("normal");
     setDue("");
   }
+
   function del(id: number) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   }
@@ -104,39 +106,44 @@ export default function Home() {
     );
   }
 
-  // Backgrounds to match your preferred look
+  // ⛔️ protect todo tab
+  function goToTodo() {
+    if (!userEmail) {
+      // not logged in → go login
+      window.location.href = "/api/auth";
+      return;
+    }
+    setTab("todo");
+  }
+
   const pageBg =
-    tab === "home"
-      ? "bg-gray-100 text-black"
-      : "bg-neutral-950 text-white"; // dark for Todo
+    tab === "home" ? "bg-gray-100 text-black" : "bg-neutral-950 text-white";
 
   return (
     <main className={`min-h-screen ${pageBg}`}>
-      {/* Top bar */}
+      {/* navbar */}
       <header className="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-900/70 backdrop-blur">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setTab("home")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                tab === "home"
-                  ? "bg-gray-200 text-black"
-                  : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
-              }`}
-            >
-              Home
-            </button>
-            <button
-              onClick={() => setTab("todo")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                tab === "todo"
-                  ? "bg-neutral-800 text-white"
-                  : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
-              }`}
-            >
-              Todo
-            </button>
-          </div>
+          <button
+            onClick={() => setTab("home")}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              tab === "home"
+                ? "bg-gray-200 text-black"
+                : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
+            }`}
+          >
+            Home
+          </button>
+          <button
+            onClick={goToTodo}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              tab === "todo"
+                ? "bg-neutral-800 text-white"
+                : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
+            }`}
+          >
+            Todo
+          </button>
 
           <div className="ml-auto flex items-center gap-2">
             {userEmail && (
@@ -163,7 +170,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* HOME */}
+      {/* home */}
       {tab === "home" && (
         <section className="min-h-[80vh] flex items-center justify-center">
           <div className="text-center px-4">
@@ -171,23 +178,28 @@ export default function Home() {
             <p className="text-lg">
               This website is <span className="font-semibold">deployed with Vercel</span> 🚀
             </p>
+            {!userEmail && (
+              <p className="mt-4 text-sm text-gray-500">
+                Login to unlock your Todo list.
+              </p>
+            )}
           </div>
         </section>
       )}
 
-      {/* TODO */}
-      {tab === "todo" && (
+      {/* todo (only shows if logged in) */}
+      {tab === "todo" && userEmail && (
         <section className="mx-auto max-w-4xl px-4 py-8">
           <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-5 shadow-2xl">
-            {userEmail && (
-              <p className="mb-2 text-sm text-white/80">
-                👋 Welcome back, <span className="font-semibold">{userEmail}</span>!
-              </p>
-            )}
+            <p className="mb-2 text-sm text-white/80">
+              👋 Welcome, <span className="font-semibold">{userEmail}</span>
+            </p>
 
-            <h2 className="text-2xl md:text-3xl font-extrabold mb-4">My To-Do Life</h2>
+            <h2 className="text-2xl md:text-3xl font-extrabold mb-4">
+              My To-Do Life
+            </h2>
 
-            {/* Form */}
+            {/* form */}
             <form
               onSubmit={addTask}
               className="grid grid-cols-1 md:grid-cols-[1fr_140px_120px_1fr_96px] gap-2 mb-4"
@@ -225,7 +237,7 @@ export default function Home() {
               </button>
             </form>
 
-            {/* Filters */}
+            {/* filters */}
             <div className="flex flex-wrap gap-2 mb-4">
               {(["all", "open", "done", "high"] as const).map((f) => (
                 <button
@@ -248,7 +260,7 @@ export default function Home() {
               ))}
             </div>
 
-            {/* List */}
+            {/* list */}
             <ul className="grid gap-2 p-0 m-0 list-none">
               {view.map((t) => (
                 <li
@@ -268,7 +280,8 @@ export default function Home() {
                     />
                     <span className="font-semibold">{t.title}</span>
                     <span className="text-xs text-white/60">
-                      {t.priority.toUpperCase()} {t.due ? `• due ${t.due}` : ""}
+                      {t.priority.toUpperCase()}{" "}
+                      {t.due ? `• due ${t.due}` : ""}
                     </span>
                     <button
                       className="underline text-sm text-blue-300 hover:text-blue-200"
@@ -283,11 +296,29 @@ export default function Home() {
                       Delete
                     </button>
                   </div>
-                  {t.notes ? <div className="mt-1 text-white/80">{t.notes}</div> : null}
+                  {t.notes ? (
+                    <div className="mt-1 text-white/80">{t.notes}</div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           </div>
+        </section>
+      )}
+
+      {/* if somehow tab = todo but no user (ex: bad state) */}
+      {tab === "todo" && !userEmail && (
+        <section className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4">
+          <h2 className="text-xl font-semibold">Login required</h2>
+          <p className="text-sm text-gray-500">
+            You must sign in before you can view or edit todos.
+          </p>
+          <a
+            href="/api/auth"
+            className="px-4 py-2 rounded bg-black text-white hover:bg-neutral-800"
+          >
+            Login
+          </a>
         </section>
       )}
     </main>
