@@ -1,4 +1,4 @@
-// app/api/tasks/[id]/toggle/route.ts
+// app/api/tasks/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { pool } from "@/lib/db";
@@ -8,8 +8,8 @@ async function getUserEmail(): Promise<string | null> {
   return c.get("user")?.value ?? null;
 }
 
-export async function POST(
-  _req: NextRequest,
+export async function PUT(
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params; // 👈 IMPORTANT in Next 15+
@@ -18,14 +18,19 @@ export async function POST(
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
+  const body = await req.json().catch(() => ({}));
+  const title = String(body.title ?? "").trim();
+  const notes = String(body.notes ?? "").trim();
+
   const { rows } = await pool.query(
     `update tasks
-       set completed = not completed
-     where id = $1 and user_email = $2
-     returning id, title, notes, priority,
-               coalesce(to_char(due, 'YYYY-MM-DD'), '') as due,
-               completed, created_at`,
-    [id, email]
+        set title = coalesce(nullif($1, ''), title),
+            notes = $2
+      where id = $3 and user_email = $4
+      returning id, title, notes, priority,
+                coalesce(to_char(due, 'YYYY-MM-DD'), '') as due,
+                completed, created_at`,
+    [title, notes, id, email]
   );
 
   if (rows.length === 0) {
