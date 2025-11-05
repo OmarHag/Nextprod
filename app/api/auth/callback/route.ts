@@ -4,27 +4,34 @@ import { WorkOS } from "@workos-inc/node";
 export async function GET(req: Request) {
   const apiKey = process.env.WORKOS_API_KEY!;
   const clientId = process.env.WORKOS_CLIENT_ID!;
-  const base = (process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin).replace(/\/$/, "");
+  const workos = new WorkOS(apiKey);
 
-  const code = new URL(req.url).searchParams.get("code");
-  if (!code) return NextResponse.redirect(`${base}/?error=missing_code`);
+  const url = new URL(req.url);
+  const origin = url.origin;
+  const code = url.searchParams.get("code");
+
+  if (!code) {
+    return NextResponse.redirect(`${origin}/?error=missing_code`);
+  }
 
   try {
-    const workos = new WorkOS(apiKey);
-    const { user } = await workos.userManagement.authenticateWithCode({ code, clientId });
+    const { user } = await workos.userManagement.authenticateWithCode({
+      code,
+      clientId,
+    });
 
-    const res = NextResponse.redirect(`${base}/?login=success`);
-    // IMPORTANT: cookie name must match /api/me
+    // Set cookie (secure only on https)
+    const res = NextResponse.redirect(`${origin}/?login=success`);
     res.cookies.set("user", user.email ?? "", {
       httpOnly: true,
       sameSite: "lax",
-      secure: base.startsWith("https://"), // true on Vercel, false locally
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 30,
+      secure: origin.startsWith("https"),
     });
     return res;
   } catch (e) {
     console.error("[callback] auth failed:", e);
-    return NextResponse.redirect(`${base}/?error=callback_failed`);
+    return NextResponse.redirect(`${origin}/?error=callback_failed`);
   }
 }

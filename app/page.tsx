@@ -8,14 +8,11 @@ type Task = {
   title: string;
   notes: string;
   priority: Priority;
-  due: string;
+  due: string;           // "YYYY-MM-DD" or ""
   completed: boolean;
   created_at: string;
 };
-
 type Me = { email?: string | null };
-
-const STORAGE_KEY = "todos_v1";
 
 export default function Home() {
   const [tab, setTab] = useState<"home" | "todo">("home");
@@ -27,16 +24,16 @@ export default function Home() {
   const [due, setDue] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
   const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // get current user from cookie (/api/me)
+  // Read auth cookie -> set user -> auto-switch to Todo after successful login
   useEffect(() => {
     fetch("/api/me")
       .then(async (r) => (r.ok ? (await r.json()) as Me : ({} as Me)))
       .then((d) => {
         if (d.email) {
           setUserEmail(d.email);
-          // you can auto-open todo here if you want:
-          // setTab("todo");
+          setTab("todo");
         } else {
           setUserEmail(null);
         }
@@ -44,18 +41,17 @@ export default function Home() {
       .catch(() => setUserEmail(null));
   }, []);
 
-  // load/save todos locally
+  // Load tasks only when logged in
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setTasks(JSON.parse(raw));
-    } catch {}
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    } catch {}
-  }, [tasks]);
+    if (!userEmail) return;
+    setLoading(true);
+    fetch("/api/tasks")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.tasks) setTasks(d.tasks);
+      })
+      .finally(() => setLoading(false));
+  }, [userEmail]);
 
   const view = useMemo(() => {
     if (filter === "open") return tasks.filter((t) => !t.completed);
@@ -64,53 +60,54 @@ export default function Home() {
     return tasks;
   }, [tasks, filter]);
 
-  function addTask(e: React.FormEvent) {
+  async function addTask(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    const t: Task = {
-      id: Date.now(),
-      title: trimmed,
-      notes: notes.trim(),
-      priority,
-      due,
-      completed: false,
-      created_at: new Date().toISOString(),
-    };
-    setTasks((prev) => [t, ...prev]);
-    setTitle("");
-    setNotes("");
-    setPriority("normal");
-    setDue("");
+    if (!title.trim()) return;
+
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, notes, priority, due }),
+    });
+
+    if (res.ok) {
+      const newTask: Task = await res.json();
+      setTasks((prev) => [newTask, ...prev]);
+      setTitle("");
+      setNotes("");
+      setPriority("normal");
+      setDue("");
+    }
   }
 
-  function del(id: number) {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-  }
-  function toggle(id: number) {
+  async function toggle(id: number) {
+    await fetch(`/api/tasks/${id}/toggle`, { method: "POST" });
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
     );
   }
-  function edit(id: number) {
+
+  async function edit(id: number) {
+    if (!userEmail) return;
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
     const newTitle = window.prompt("Edit title", t.title) ?? t.title;
     const newNotes = window.prompt("Edit notes", t.notes) ?? t.notes;
-    setTasks((prev) =>
-      prev.map((x) =>
-        x.id === id
-          ? { ...x, title: newTitle.trim(), notes: newNotes.trim() }
-          : x
-      )
-    );
+
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newTitle.trim(), notes: newNotes.trim() }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks((prev) => prev.map((x) => (x.id === id ? updated : x)));
+    }
   }
 
-  // ⛔️ protect todo tab
   function goToTodo() {
     if (!userEmail) {
-      // not logged in → go login
-      window.location.href = "/api/auth";
+      window.location.href = "/api/auth"; // kicks off WorkOS login
       return;
     }
     setTab("todo");
@@ -121,7 +118,7 @@ export default function Home() {
 
   return (
     <main className={`min-h-screen ${pageBg}`}>
-      {/* navbar */}
+      {/* Navbar */}
       <header className="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-900/70 backdrop-blur">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3">
           <button
@@ -170,7 +167,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* home */}
+      {/* HOME (white) */}
       {tab === "home" && (
         <section className="min-h-[80vh] flex items-center justify-center">
           <div className="text-center px-4">
@@ -179,7 +176,7 @@ export default function Home() {
               This website is <span className="font-semibold">deployed with Vercel</span> 🚀
             </p>
             {!userEmail && (
-              <p className="mt-4 text-sm text-gray-500">
+              <p className="mt-4 text-sm text-gray-600">
                 Login to unlock your Todo list.
               </p>
             )}
@@ -187,7 +184,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* todo (only shows if logged in) */}
+      {/* TODO (dark) */}
       {tab === "todo" && userEmail && (
         <section className="mx-auto max-w-4xl px-4 py-8">
           <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-5 shadow-2xl">
@@ -195,11 +192,9 @@ export default function Home() {
               👋 Welcome, <span className="font-semibold">{userEmail}</span>
             </p>
 
-            <h2 className="text-2xl md:text-3xl font-extrabold mb-4">
-              My To-Do Life
-            </h2>
+            <h2 className="text-2xl md:text-3xl font-extrabold mb-4">My To-Do Life</h2>
 
-            {/* form */}
+            {/* Form */}
             <form
               onSubmit={addTask}
               className="grid grid-cols-1 md:grid-cols-[1fr_140px_120px_1fr_96px] gap-2 mb-4"
@@ -213,7 +208,7 @@ export default function Home() {
               />
               <input
                 type="date"
-                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white placeholder-white/50"
+                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white"
                 value={due}
                 onChange={(e) => setDue(e.target.value)}
               />
@@ -237,7 +232,7 @@ export default function Home() {
               </button>
             </form>
 
-            {/* filters */}
+            {/* Filters */}
             <div className="flex flex-wrap gap-2 mb-4">
               {(["all", "open", "done", "high"] as const).map((f) => (
                 <button
@@ -260,7 +255,7 @@ export default function Home() {
               ))}
             </div>
 
-            {/* list */}
+            {/* List */}
             <ul className="grid gap-2 p-0 m-0 list-none">
               {view.map((t) => (
                 <li
@@ -280,20 +275,13 @@ export default function Home() {
                     />
                     <span className="font-semibold">{t.title}</span>
                     <span className="text-xs text-white/60">
-                      {t.priority.toUpperCase()}{" "}
-                      {t.due ? `• due ${t.due}` : ""}
+                      {t.priority.toUpperCase()} {t.due ? `• due ${t.due}` : ""}
                     </span>
                     <button
                       className="underline text-sm text-blue-300 hover:text-blue-200"
                       onClick={() => edit(t.id)}
                     >
                       Edit
-                    </button>
-                    <button
-                      className="underline text-sm text-rose-300 hover:text-rose-200"
-                      onClick={() => del(t.id)}
-                    >
-                      Delete
                     </button>
                   </div>
                   {t.notes ? (
@@ -302,17 +290,18 @@ export default function Home() {
                 </li>
               ))}
             </ul>
+
+            {loading && (
+              <p className="mt-3 text-white/60 text-sm">Loading...</p>
+            )}
           </div>
         </section>
       )}
 
-      {/* if somehow tab = todo but no user (ex: bad state) */}
+      {/* If user not logged in but somehow on Todo */}
       {tab === "todo" && !userEmail && (
         <section className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4">
           <h2 className="text-xl font-semibold">Login required</h2>
-          <p className="text-sm text-gray-500">
-            You must sign in before you can view or edit todos.
-          </p>
           <a
             href="/api/auth"
             className="px-4 py-2 rounded bg-black text-white hover:bg-neutral-800"
