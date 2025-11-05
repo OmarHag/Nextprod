@@ -1,37 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { WorkOS } from "@workos-inc/node";
 
-export async function GET(req: Request) {
-  const apiKey = process.env.WORKOS_API_KEY!;
-  const clientId = process.env.WORKOS_CLIENT_ID!;
-  const workos = new WorkOS(apiKey);
+const clientId = process.env.WORKOS_CLIENT_ID!;
+const apiKey = process.env.WORKOS_API_KEY!;
 
-  const url = new URL(req.url);
-  const origin = url.origin;
-  const code = url.searchParams.get("code");
-
-  if (!code) {
-    return NextResponse.redirect(`${origin}/?error=missing_code`);
-  }
-
+export async function GET(req: NextRequest) {
   try {
+    const reqUrl = new URL(req.url);
+    const code = reqUrl.searchParams.get("code");
+    if (!code) {
+      return NextResponse.redirect(new URL("/?error=missing_code", req.url));
+    }
+
+    const workos = new WorkOS(apiKey); // ✅ pass string
     const { user } = await workos.userManagement.authenticateWithCode({
       code,
       clientId,
     });
 
-    // Set cookie (secure only on https)
-    const res = NextResponse.redirect(`${origin}/?login=success`);
+    // Set a simple cookie with the email
+    const res = NextResponse.redirect(new URL("/?login=success", req.url));
     res.cookies.set("user", user.email ?? "", {
       httpOnly: true,
+      secure: true,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      secure: origin.startsWith("https"),
+      maxAge: 60 * 60 * 24 * 30, // 30 days
     });
     return res;
   } catch (e) {
     console.error("[callback] auth failed:", e);
-    return NextResponse.redirect(`${origin}/?error=callback_failed`);
+    return NextResponse.redirect(new URL("/?error=callback_failed", req.url));
   }
 }

@@ -1,21 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { WorkOS } from "@workos-inc/node";
 
-export async function GET(req: Request) {
-  const apiKey = process.env.WORKOS_API_KEY!;
-  const clientId = process.env.WORKOS_CLIENT_ID!;
-  const workos = new WorkOS(apiKey);
+const clientId = process.env.WORKOS_CLIENT_ID!;
+const apiKey = process.env.WORKOS_API_KEY!;
 
-  // Works on localhost:3000/3001 and Vercel
-  const origin = new URL(req.url).origin;
+export async function GET(req: NextRequest) {
+  // Build absolute redirect URI that matches current host (works on localhost, Vercel, custom domain)
+  const url = new URL(req.url);
+  const origin = `${url.protocol}//${url.host}`;
   const redirectUri = `${origin}/api/auth/callback`;
 
-  // IMPORTANT: provider must match exactly what you enabled in WorkOS → Authentication → Providers
-  const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+  const workos = new WorkOS(apiKey); // ✅ pass string
+  const authUrl = workos.userManagement.getAuthorizationUrl({
     clientId,
-    provider: "GoogleOAuth", // <- keep this exact casing if you enabled Google OAuth
+    provider: "GoogleOAuth", // make sure Google OAuth is enabled in WorkOS
     redirectUri,
   });
 
-  return NextResponse.redirect(authorizationUrl);
+  return NextResponse.redirect(authUrl);
 }
