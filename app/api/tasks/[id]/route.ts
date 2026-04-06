@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { pool } from "@/lib/db";
+import { trackServerEventSafely } from "@/lib/analytics";
 
 async function getUserEmail(): Promise<string | null> {
   const c = await cookies();
@@ -36,5 +37,17 @@ export async function PUT(
   if (rows.length === 0) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+
+  await trackServerEventSafely({
+    eventName: "todo_updated",
+    path: "/?tab=todo",
+    userEmail: email,
+    metadata: {
+      taskId: Number(id),
+      updatedTitle: Boolean(title),
+      updatedNotes: true,
+    },
+  });
+
   return NextResponse.json(rows[0]);
 }

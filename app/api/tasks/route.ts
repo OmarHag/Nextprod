@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { pool } from "@/lib/db";
+import { trackServerEventSafely } from "@/lib/analytics";
 
 const getUserEmail = async (): Promise<string | null> => {
   const c = await cookies();
@@ -63,6 +64,18 @@ export async function POST(req: Request) {
        created_at`,
     [email, title, notes, priority, due]
   );
+
+  await trackServerEventSafely({
+    eventName: "todo_created",
+    path: "/?tab=todo",
+    userEmail: email,
+    metadata: {
+      taskId: rows[0]?.id ?? null,
+      priority,
+      hasDueDate: Boolean(due),
+      hasNotes: Boolean(notes),
+    },
+  });
 
   return NextResponse.json(rows[0], { status: 201 });
 }

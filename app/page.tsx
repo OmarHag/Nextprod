@@ -1,6 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import PageViewTracker from "@/components/analytics/PageViewTracker";
+import SiteHeader from "@/components/SiteHeader";
+import { trackEvent } from "@/lib/analytics-client";
 
 type Priority = "low" | "normal" | "high";
 type Task = {
@@ -8,16 +13,16 @@ type Task = {
   title: string;
   notes: string;
   priority: Priority;
-  due: string;           // "YYYY-MM-DD" or ""
+  due: string;
   completed: boolean;
   created_at: string;
 };
 type Me = { email?: string | null };
 
 export default function Home() {
+  const router = useRouter();
   const [tab, setTab] = useState<"home" | "todo">("home");
   const [userEmail, setUserEmail] = useState<string | null>(null);
-
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<"all" | "open" | "done" | "high">("all");
   const [title, setTitle] = useState("");
@@ -26,14 +31,20 @@ export default function Home() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Read auth cookie -> set user -> auto-switch to Todo after successful login
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    setTab(requestedTab === "todo" ? "todo" : "home");
+  }, []);
+
   useEffect(() => {
     fetch("/api/me")
-      .then(async (r) => (r.ok ? (await r.json()) as Me : ({} as Me)))
+      .then(async (r) => (r.ok ? ((await r.json()) as Me) : ({} as Me)))
       .then((d) => {
         if (d.email) {
           setUserEmail(d.email);
-          setTab("todo");
+          if (new URLSearchParams(window.location.search).get("tab") === "todo") {
+            setTab("todo");
+          }
         } else {
           setUserEmail(null);
         }
@@ -41,7 +52,6 @@ export default function Home() {
       .catch(() => setUserEmail(null));
   }, []);
 
-  // Load tasks only when logged in
   useEffect(() => {
     if (!userEmail) return;
     setLoading(true);
@@ -83,124 +93,163 @@ export default function Home() {
   async function toggle(id: number) {
     await fetch(`/api/tasks/${id}/toggle`, { method: "POST" });
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
     );
   }
 
   async function edit(id: number) {
     if (!userEmail) return;
-    const t = tasks.find((x) => x.id === id);
-    if (!t) return;
-    const newTitle = window.prompt("Edit title", t.title) ?? t.title;
-    const newNotes = window.prompt("Edit notes", t.notes) ?? t.notes;
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+
+    const newTitle = window.prompt("Edit title", task.title) ?? task.title;
+    const newNotes = window.prompt("Edit notes", task.notes) ?? task.notes;
 
     const res = await fetch(`/api/tasks/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: newTitle.trim(), notes: newNotes.trim() }),
     });
+
     if (res.ok) {
       const updated: Task = await res.json();
-      setTasks((prev) => prev.map((x) => (x.id === id ? updated : x)));
+      setTasks((prev) => prev.map((item) => (item.id === id ? updated : item)));
     }
   }
 
-  function goToTodo() {
+  function openTodo() {
+    void trackEvent("todo_open_clicked", {
+      path: "/",
+      metadata: { from: "home" },
+    });
+
     if (!userEmail) {
-      window.location.href = "/api/auth"; // kicks off WorkOS login
+      window.location.href = "/api/auth";
       return;
     }
+
     setTab("todo");
+    router.replace("/?tab=todo");
   }
 
-  const pageBg =
-    tab === "home" ? "bg-gray-100 text-black" : "bg-neutral-950 text-white";
+  function openHome() {
+    setTab("home");
+    router.replace("/");
+  }
+
+  useEffect(() => {
+    if (tab === "home") {
+      void trackEvent("home_viewed", { path: "/" });
+      return;
+    }
+
+    if (tab === "todo" && userEmail) {
+      void trackEvent("todo_viewed", { path: "/?tab=todo" });
+    }
+  }, [tab, userEmail]);
 
   return (
-    <main className={`min-h-screen ${pageBg}`}>
-      {/* Navbar */}
-      <header className="sticky top-0 z-20 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-900/70 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => setTab("home")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-              tab === "home"
-                ? "bg-gray-200 text-black"
-                : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
-            }`}
-          >
-            Home
-          </button>
-          <button
-            onClick={goToTodo}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-              tab === "todo"
-                ? "bg-neutral-800 text-white"
-                : "hover:bg-gray-100 text-black dark:text-white dark:hover:bg-neutral-800"
-            }`}
-          >
-            Todo
-          </button>
+    <main className="theme-shell min-h-screen text-white">
+      <SiteHeader currentSection={tab} />
+      {tab === "home" && <PageViewTracker page="home" path="/" />}
+      {tab === "todo" && userEmail && (
+        <PageViewTracker page="todo" path="/?tab=todo" />
+      )}
 
-          <div className="ml-auto flex items-center gap-2">
-            {userEmail && (
-              <span className="hidden sm:block text-xs sm:text-sm text-black/70 dark:text-white/70 truncate max-w-[180px]">
-                {userEmail}
-              </span>
-            )}
-            {userEmail ? (
-              <a
-                href="/api/logout"
-                className="px-3 py-1.5 rounded-md bg-neutral-800 text-white hover:bg-neutral-700 text-sm"
-              >
-                Logout
-              </a>
-            ) : (
+      {tab === "home" && (
+        <section className="mx-auto flex min-h-[calc(100vh-88px)] max-w-4xl items-center px-4 py-16">
+          <div className="theme-panel w-full rounded-[2rem] p-8 sm:p-12">
+            <div className="theme-pill mb-6 inline-flex rounded-full px-4 py-2 text-sm font-medium">
+              About me
+            </div>
+
+            <h1 className="text-5xl font-black tracking-tight text-white sm:text-6xl">
+              Omar Hagaley
+            </h1>
+
+            <p className="mt-5 max-w-2xl text-2xl font-semibold leading-9 text-slate-100">
+              I&apos;m a Computer Science student building projects that keep growing with me.
+            </p>
+
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-300">
+              This website is my personal hub. It brings together some of the
+              work I have done over the years, along with the tools and projects
+              I keep building as the site grows with me.
+            </p>
+
+            <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-300">
+              I want this to be one place that reflects who I am, what I am
+              building, and the projects I care about most.
+            </p>
+
+            <div className="mt-10 rounded-3xl border border-white/10 bg-black/20 p-6">
+              <p className="text-sm uppercase tracking-[0.25em] text-slate-400">
+                Access
+              </p>
+              <p className="mt-3 text-lg leading-8 text-slate-300">
+                Please login to access all features, including the private
+                interview workspace and the todo area.
+              </p>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-4">
               <a
                 href="/api/auth"
-                className="px-3 py-1.5 rounded-md bg-black text-white hover:bg-neutral-800 text-sm"
+                onClick={() =>
+                  void trackEvent("login_cta_clicked", {
+                    path: "/",
+                    metadata: { section: "home_access" },
+                  })
+                }
+                className="theme-button-primary rounded-full px-7 py-3 text-sm font-semibold transition"
               >
                 Login
               </a>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* HOME (white) */}
-      {tab === "home" && (
-        <section className="min-h-[80vh] flex items-center justify-center">
-          <div className="text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Omar Hagaley</h1>
-            <p className="text-lg">
-              This website is <span className="font-semibold">deployed with Vercel</span> 🚀
-            </p>
-            {!userEmail && (
-              <p className="mt-4 text-sm text-gray-600">
-                Login to unlock your Todo list.
-              </p>
-            )}
+              <button
+                onClick={openTodo}
+                className="theme-button-secondary rounded-full px-7 py-3 text-sm font-semibold transition"
+              >
+                Open Todo
+              </button>
+              <Link
+                href={userEmail ? "/interview" : "/api/auth"}
+                onClick={() =>
+                  void trackEvent("interview_open_clicked", {
+                    path: "/",
+                    metadata: { authenticated: Boolean(userEmail) },
+                  })
+                }
+                className="theme-button-secondary rounded-full px-7 py-3 text-sm font-semibold transition"
+              >
+                Open Interview
+              </Link>
+            </div>
           </div>
         </section>
       )}
 
-      {/* TODO (dark) */}
       {tab === "todo" && userEmail && (
         <section className="mx-auto max-w-4xl px-4 py-8">
-          <div className="rounded-2xl border border-white/10 bg-neutral-900/90 p-5 shadow-2xl">
-            <p className="mb-2 text-sm text-white/80">
-              👋 Welcome, <span className="font-semibold">{userEmail}</span>
-            </p>
+          <div className="theme-panel rounded-[2rem] p-6">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-400">{userEmail}</p>
+                <h2 className="text-3xl font-extrabold text-white">My To-Do Life</h2>
+              </div>
+              <button
+                onClick={openHome}
+                className="theme-button-secondary rounded-full px-4 py-2 text-sm font-medium transition"
+              >
+                Back Home
+              </button>
+            </div>
 
-            <h2 className="text-2xl md:text-3xl font-extrabold mb-4">My To-Do Life</h2>
-
-            {/* Form */}
             <form
               onSubmit={addTask}
-              className="grid grid-cols-1 md:grid-cols-[1fr_140px_120px_1fr_96px] gap-2 mb-4"
+              className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_140px_140px_1fr_96px]"
             >
               <input
-                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white placeholder-white/50"
+                className="theme-input rounded-xl px-4 py-3"
                 placeholder="Task title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -208,12 +257,12 @@ export default function Home() {
               />
               <input
                 type="date"
-                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white"
+                className="theme-input rounded-xl px-4 py-3"
                 value={due}
                 onChange={(e) => setDue(e.target.value)}
               />
               <select
-                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white"
+                className="theme-input rounded-xl px-4 py-3"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as Priority)}
               >
@@ -222,92 +271,110 @@ export default function Home() {
                 <option value="high">high</option>
               </select>
               <input
-                className="px-3 py-2 rounded-lg border border-white/15 bg-neutral-800 text-white placeholder-white/50"
+                className="theme-input rounded-xl px-4 py-3"
                 placeholder="Notes (optional)"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
-              <button className="px-3 py-2 rounded-lg border border-white/15 bg-white text-black font-medium hover:bg-white/90">
+              <button className="theme-button-primary rounded-xl px-4 py-2 font-semibold transition">
                 Add
               </button>
             </form>
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {(["all", "open", "done", "high"] as const).map((f) => (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {(["all", "open", "done", "high"] as const).map((item) => (
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg border text-sm ${
-                    filter === f
-                      ? "border-blue-400 text-blue-300 bg-blue-400/10"
-                      : "border-white/15 text-white/80 hover:bg-white/5"
+                  key={item}
+                  onClick={() => setFilter(item)}
+                  className={`rounded-full px-3 py-1.5 text-sm transition ${
+                    filter === item
+                      ? "theme-button-primary"
+                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
                   }`}
                 >
-                  {f === "all"
-                    ? "All"
-                    : f === "open"
-                    ? "Open"
-                    : f === "done"
-                    ? "Completed"
-                    : "High Priority"}
+                  {item}
                 </button>
               ))}
+              <div className="ml-auto text-sm text-slate-400">
+                {loading ? "Loading..." : `${view.length} visible / ${tasks.length} total`}
+              </div>
             </div>
 
-            {/* List */}
-            <ul className="grid gap-2 p-0 m-0 list-none">
-              {view.map((t) => (
-                <li
-                  key={t.id}
-                  className={`rounded-xl p-3 border ${
-                    t.completed
-                      ? "bg-neutral-800/70 border-white/10 opacity-80"
-                      : "bg-neutral-800 border-white/10"
-                  }`}
+            <div className="space-y-3">
+              {view.map((task) => (
+                <div
+                  key={task.id}
+                  className="theme-panel-soft flex flex-col gap-3 rounded-2xl p-4 md:flex-row md:items-start md:justify-between"
                 >
-                  <div className="grid grid-cols-[28px_1fr_auto_auto_auto] gap-3 items-center">
-                    <input
-                      type="checkbox"
-                      checked={t.completed}
-                      onChange={() => toggle(t.id)}
-                      className="h-4 w-4 accent-blue-500"
-                    />
-                    <span className="font-semibold">{t.title}</span>
-                    <span className="text-xs text-white/60">
-                      {t.priority.toUpperCase()} {t.due ? `• due ${t.due}` : ""}
-                    </span>
-                    <button
-                      className="underline text-sm text-blue-300 hover:text-blue-200"
-                      onClick={() => edit(t.id)}
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  {t.notes ? (
-                    <div className="mt-1 text-white/80">{t.notes}</div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => toggle(task.id)}
+                        className={`h-6 w-6 rounded-md border ${
+                          task.completed
+                            ? "border-emerald-400 bg-emerald-500"
+                            : "border-white/30 bg-transparent"
+                        }`}
+                        aria-label="Toggle complete"
+                      />
+                      <h3
+                        className={`text-lg font-semibold ${
+                          task.completed ? "text-white/45 line-through" : "text-white"
+                        }`}
+                      >
+                        {task.title}
+                      </h3>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs uppercase tracking-wide text-slate-300">
+                        {task.priority}
+                      </span>
+                      {task.due && (
+                        <span className="rounded-full bg-cyan-400/12 px-2 py-0.5 text-xs text-cyan-100">
+                          Due {task.due}
+                        </span>
+                      )}
+                    </div>
 
-            {loading && (
-              <p className="mt-3 text-white/60 text-sm">Loading...</p>
-            )}
+                    {task.notes && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-300">
+                        {task.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => edit(task.id)}
+                    className="theme-button-secondary self-start rounded-xl px-3 py-2 text-sm font-medium transition"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ))}
+
+              {!loading && view.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-slate-400">
+                  No tasks in this view yet.
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
 
-      {/* If user not logged in but somehow on Todo */}
       {tab === "todo" && !userEmail && (
-        <section className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4">
-          <h2 className="text-xl font-semibold">Login required</h2>
-          <a
-            href="/api/auth"
-            className="px-4 py-2 rounded bg-black text-white hover:bg-neutral-800"
-          >
-            Login
-          </a>
+        <section className="mx-auto flex min-h-[calc(100vh-88px)] max-w-3xl items-center justify-center px-4 py-16">
+          <div className="theme-panel rounded-[2rem] p-10 text-center">
+            <h2 className="text-3xl font-black text-white">Login required</h2>
+            <p className="mt-4 text-lg leading-8 text-slate-300">
+              Sign in to access your database-backed todo list inside the main
+              `nextprod` app.
+            </p>
+            <a
+              href="/api/auth"
+              className="theme-button-primary mt-8 inline-flex rounded-full px-6 py-3 text-sm font-semibold transition"
+            >
+              Continue to Login
+            </a>
+          </div>
         </section>
       )}
     </main>

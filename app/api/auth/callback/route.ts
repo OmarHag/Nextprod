@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WorkOS } from "@workos-inc/node";
+import { trackServerEventSafely } from "@/lib/analytics";
 
 const clientId = process.env.WORKOS_CLIENT_ID!;
 const apiKey = process.env.WORKOS_API_KEY!;
@@ -16,6 +17,15 @@ export async function GET(req: NextRequest) {
     const { user } = await workos.userManagement.authenticateWithCode({
       code,
       clientId,
+    });
+
+    await trackServerEventSafely({
+      eventName: "login_success",
+      path: "/api/auth/callback",
+      userEmail: user.email ?? null,
+      metadata: {
+        provider: "GoogleOAuth",
+      },
     });
 
     // Set a simple cookie with the email
