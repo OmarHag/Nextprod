@@ -39,8 +39,7 @@ export default async function AdminPage() {
               Analytics Dashboard
             </h1>
             <p className="mt-3 max-w-2xl text-slate-300">
-              Real usage data for visitors, feature clicks, logins, todo activity,
-              and interview engagement.
+              Real usage data for visitors, feature clicks, logins, and todo activity.
             </p>
           </div>
           <Link

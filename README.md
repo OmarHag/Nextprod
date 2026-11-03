@@ -52,4 +52,3 @@ Next.js 15, React 19, TypeScript, CSS, and Lucide icons.
 - All cluster behavior is simulated in one browser tab.
 - Timing and load values illustrate system relationships; they are not benchmark results.
 - Refreshing the page resets the simulation.
-- Legacy authenticated productivity and interview routes remain isolated from the new landing experience and are not part of the simulation.
