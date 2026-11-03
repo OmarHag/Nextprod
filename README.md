@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Faultline
 
-## Getting Started
+An interactive distributed-systems failure lab that runs entirely in the browser. Send a traffic burst, stop a worker, and watch queue pressure, retries, latency, health, and recovery change in real time.
 
-First, run the development server:
+## Why it exists
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Concepts such as backpressure, replication, rerouting, and idempotent retries are often explained with static diagrams. Faultline turns them into a small system you can break and observe.
+
+## What the simulation models
+
+```mermaid
+flowchart LR
+  R[Incoming requests] --> Q[Job queue]
+  Q --> W1[Worker 1]
+  Q --> W2[Worker 2]
+  Q --> W3[Worker 3]
+  W1 & W2 & W3 --> C[Replicated commit]
+  W1 -. failure .-> Q
+  Q -. retry + reroute .-> W2
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- A three-worker pool distributed across simulated regions.
+- Queue growth and draining based on available throughput.
+- Traffic bursts that trigger visible backpressure.
+- Worker failure, rerouting, recovery, and replicated-state rejoin.
+- Live availability, latency, completed-job, retry, CPU-load, and event displays.
+- Pause, resume, overload, failure-injection, and reset controls.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+This is an educational simulation, not a production benchmark or a connection to real infrastructure. The state machine is implemented in `app/page.tsx` and deliberately requires no account, API key, model, or backend service.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Run locally
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Then open `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Verify
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+```
 
-## Deploy on Vercel
+## Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Next.js 15, React 19, TypeScript, CSS, and Lucide icons.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Current limitations
+
+- All cluster behavior is simulated in one browser tab.
+- Timing and load values illustrate system relationships; they are not benchmark results.
+- Refreshing the page resets the simulation.
+- Legacy authenticated productivity and interview routes remain isolated from the new landing experience and are not part of the simulation.
