@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-type Section = "home" | "todo" | "interview" | "admin";
+type Section = "home" | "todo" | "admin";
 type Me = { email?: string | null; isAdmin?: boolean };
 
 const baseLinkClass =
@@ -31,7 +31,6 @@ export default function SiteHeader({
   }, []);
 
   const todoHref = userEmail ? "/?tab=todo" : "/api/auth";
-  const interviewHref = userEmail ? "/interview" : "/api/auth";
   const showAdmin = isAdmin;
 
   return (
@@ -47,16 +46,6 @@ export default function SiteHeader({
             }`}
           >
             Home
-          </Link>
-          <Link
-            href={interviewHref}
-            className={`${baseLinkClass} ${
-              currentSection === "interview"
-                ? "theme-button-primary"
-                : "text-slate-300 hover:bg-white/6 hover:text-white"
-            }`}
-          >
-            Interview
           </Link>
           <Link
             href={todoHref}
