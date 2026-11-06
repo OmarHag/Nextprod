@@ -7,27 +7,27 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://omarh.dev"),
-  title: "Omar Hagaley — You Crossed the Internet to Get Here",
-  description: "See the real browser trace behind your visit, then break a simulated distributed system and watch it recover.",
+  title: "Omar's Workbench — Omar Hagaley",
+  description: "Pick up an object and explore the systems, desktop apps, research, and applied-AI projects Omar Hagaley is building.",
   openGraph: {
-    title: "You Crossed the Internet to Get Here",
-    description: "A live browser trace and distributed-systems failure lab by Omar Hagaley.",
+    title: "Omar's Workbench",
+    description: "Pick something up. Every object is a real project, experiment, or piece of research.",
     url: "/",
-    siteName: "Omar Hagaley",
+    siteName: "Omar's Workbench",
     images: [
       {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "You crossed the internet to get here — a live browser trace by Omar Hagaley.",
+        alt: "Omar's Workbench — pick something up.",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "You Crossed the Internet to Get Here",
-    description: "A live browser trace and distributed-systems failure lab by Omar Hagaley.",
+    title: "Omar's Workbench",
+    description: "Pick something up. Every object is a real project, experiment, or piece of research.",
     images: ["/og.png"],
   },
 };
