@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ArrowRight, Boxes, CircleStop, Cpu, Github, Play, RotateCcw, ServerCrash, ShieldCheck, Sparkles, Terminal, Zap } from "lucide-react";
+import { Activity, ArrowDown, ArrowRight, Boxes, Braces, ChevronDown, CircleStop, Cpu, Github, LockKeyhole, Play, Radio, RotateCcw, ServerCrash, ShieldCheck, Sparkles, Terminal, Zap } from "lucide-react";
 
 type WorkerStatus = "healthy" | "recovering" | "offline";
 type Worker = { id: string; region: string; status: WorkerStatus; load: number; processed: number };
 type EventItem = { id: number; tone: "info" | "warn" | "good"; text: string };
+type VisitTrace = { dns: number; connection: number; secure: number; server: number; download: number; dom: number; total: number; transfer: number; resources: number; resourceBytes: number; protocol: string; navigation: string };
+type ExperimentResult = { baseline: number; injected: number; recovery: number };
 
 const initialWorkers: Worker[] = [
   { id: "edge-01", region: "us-west", status: "healthy", load: 18, processed: 1240 },
@@ -19,6 +21,10 @@ const initialEvents: EventItem[] = [
 ];
 
 export default function Home() {
+  const [visit, setVisit] = useState<VisitTrace | null>(null);
+  const [showTrace, setShowTrace] = useState(false);
+  const [experiment, setExperiment] = useState<"idle" | "baseline" | "delay" | "retry" | "done">("idle");
+  const [experimentResult, setExperimentResult] = useState<ExperimentResult | null>(null);
   const [running, setRunning] = useState(true);
   const [workers, setWorkers] = useState(initialWorkers);
   const [queue, setQueue] = useState(7);
@@ -30,6 +36,64 @@ export default function Home() {
   const tick = useRef(0);
   const healthyCount = workers.filter((worker) => worker.status === "healthy").length;
   const availability = healthyCount === 3 ? "99.99" : healthyCount === 2 ? "99.72" : "97.10";
+
+  useEffect(() => {
+    const readTrace = () => {
+      const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      if (!entry) return;
+      const resources = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+      setVisit({
+        dns: Math.max(0, entry.domainLookupEnd - entry.domainLookupStart),
+        connection: Math.max(0, entry.connectEnd - entry.connectStart),
+        secure: entry.secureConnectionStart > 0 ? Math.max(0, entry.connectEnd - entry.secureConnectionStart) : 0,
+        server: Math.max(0, entry.responseStart - entry.requestStart),
+        download: Math.max(0, entry.responseEnd - entry.responseStart),
+        dom: Math.max(0, entry.domInteractive - entry.responseEnd),
+        total: Math.max(0, entry.loadEventEnd || entry.domComplete),
+        transfer: entry.transferSize,
+        resources: resources.length,
+        resourceBytes: resources.reduce((sum, resource) => sum + resource.transferSize, 0),
+        protocol: entry.nextHopProtocol || "not exposed",
+        navigation: entry.type,
+      });
+    };
+    if (document.readyState === "complete") readTrace();
+    else window.addEventListener("load", readTrace, { once: true });
+    return () => window.removeEventListener("load", readTrace);
+  }, []);
+
+  const runResilienceTest = async () => {
+    if (experiment !== "idle" && experiment !== "done") return;
+    setExperimentResult(null);
+    setExperiment("baseline");
+    const probe = async (label: string) => {
+      const start = performance.now();
+      await fetch(`/favicon.ico?probe=${label}-${Date.now()}`, { cache: "no-store" });
+      return performance.now() - start;
+    };
+    try {
+      const baseline = await probe("baseline");
+      setExperiment("delay");
+      const injected = 650;
+      await new Promise((resolve) => window.setTimeout(resolve, injected));
+      setExperiment("retry");
+      const recovery = await probe("retry");
+      setExperimentResult({ baseline, injected, recovery });
+      setExperiment("done");
+    } catch {
+      setExperiment("idle");
+    }
+  };
+
+  const traceJson = visit ? JSON.stringify({
+    source: "PerformanceNavigationTiming",
+    navigationType: visit.navigation,
+    protocol: visit.protocol,
+    milliseconds: { dns: visit.dns, tcp: visit.connection, tls: visit.secure, server: visit.server, download: visit.download, dom: visit.dom, total: visit.total },
+    transferBytes: visit.transfer,
+    resourceCount: visit.resources,
+    resourceTransferBytes: visit.resourceBytes,
+  }, null, 2) : "Waiting for the browser timing record…";
 
   const pushEvent = (text: string, tone: EventItem["tone"] = "info") => {
     setEvents((current) => [{ id: eventId.current++, text, tone }, ...current.slice(0, 5)]);
@@ -90,14 +154,71 @@ export default function Home() {
     <main className="lab-shell">
       <div className="noise" />
       <nav className="nav-wrap">
-        <a className="wordmark" href="#top"><span className="wordmark-mark"><Boxes size={17} /></span>FAULTLINE<em>LAB</em></a>
-        <div className="nav-status"><span className="pulse-dot" /> simulation online</div>
+        <a className="wordmark" href="#top"><span className="wordmark-mark"><Radio size={17} /></span>OMARH.DEV<em>LIVE</em></a>
+        <div className="nav-status"><span className="pulse-dot" /> measuring this visit</div>
         <a className="github-link" href="https://github.com/OmarHag/Nextprod" target="_blank" rel="noreferrer"><Github size={16} /> source</a>
       </nav>
 
-      <section className="hero" id="top">
+      <section className="journey-hero" id="top">
+        <div className="journey-kicker"><span>01</span> YOUR VISIT / MEASURED LIVE</div>
+        <h1>You crossed the internet<br />to get here.</h1>
+        <p className="journey-intro">This page is reading its own arrival receipt. No tracking script, no made-up speed test—just timing data your browser recorded while loading <strong>omarh.dev</strong>.</p>
+        <div className="arrival-readout">
+          <div className="arrival-number"><span>{visit ? Math.round(visit.total) : "—"}</span><small>milliseconds to arrive</small></div>
+          <div className="arrival-route" aria-label="The measured stages of this page load">
+            <TraceStage label="find" value={visit?.dns} detail="DNS" />
+            <i />
+            <TraceStage label="secure" value={visit?.secure} detail="TLS" />
+            <i />
+            <TraceStage label="respond" value={visit?.server} detail="SERVER" />
+            <i />
+            <TraceStage label="receive" value={visit?.download} detail="PAGE" />
+          </div>
+        </div>
+        <div className="journey-note"><LockKeyhole size={14} /> Measured in your browser. Nothing here is saved.</div>
+        <button className="journey-next" onClick={() => setShowTrace((value) => !value)} aria-expanded={showTrace}>Open the engineer trace <ChevronDown className={showTrace ? "turned" : ""} size={16} /></button>
+      </section>
+
+      <section className={`trace-deck ${showTrace ? "open" : ""}`} aria-hidden={!showTrace}>
+        <div className="section-label"><span>02</span> UNDER THE HOOD / REAL VALUES</div>
+        <div className="trace-heading"><div><h2>Your browser kept the receipts.</h2><p>The friendly story above and the technical view below use the same navigation record. Zero means the browser reused a connection, served a cache, or withheld that measurement.</p></div><div className="truth-key"><span><i className="measured" /> measured</span><span><i className="simulated" /> simulated</span></div></div>
+        <div className="waterfall-card">
+          <div className="waterfall-head"><span>navigation waterfall</span><span>{visit?.protocol ?? "measuring protocol"} / {visit?.navigation ?? "navigation"}</span></div>
+          <div className="waterfall-list">
+            <WaterfallRow label="DNS lookup" value={visit?.dns} max={visit?.total} />
+            <WaterfallRow label="TCP connection" value={visit?.connection} max={visit?.total} />
+            <WaterfallRow label="TLS negotiation" value={visit?.secure} max={visit?.total} />
+            <WaterfallRow label="server → first byte" value={visit?.server} max={visit?.total} />
+            <WaterfallRow label="document transfer" value={visit?.download} max={visit?.total} />
+            <WaterfallRow label="DOM construction" value={visit?.dom} max={visit?.total} />
+          </div>
+          <div className="trace-facts">
+            <TraceFact label="navigation bytes" value={formatBytes(visit?.transfer)} />
+            <TraceFact label="loaded resources" value={visit ? String(visit.resources) : "—"} />
+            <TraceFact label="resource bytes" value={formatBytes(visit?.resourceBytes)} />
+            <TraceFact label="source" value="browser API" />
+          </div>
+        </div>
+
+        <div className="trace-lower">
+          <div className="experiment-card">
+            <div className="experiment-top"><div><span className="card-kicker">CONTROLLED EXPERIMENT</span><h3>Make a fast request feel slow.</h3></div><Zap size={22} /></div>
+            <p>Run a real same-origin request, inject a clearly labeled 650 ms application delay, then retry. It demonstrates why latency budgets and recovery behavior matter without pretending to alter your network.</p>
+            <div className="experiment-track">
+              <ExperimentStep label="baseline" value={experimentResult ? `${Math.round(experimentResult.baseline)} ms` : "real request"} active={experiment === "baseline"} done={experiment !== "idle" && experiment !== "baseline"} />
+              <ExperimentStep label="delay" value="+650 ms" active={experiment === "delay"} done={experiment === "retry" || experiment === "done"} simulated />
+              <ExperimentStep label="retry" value={experimentResult ? `${Math.round(experimentResult.recovery)} ms` : "real request"} active={experiment === "retry"} done={experiment === "done"} />
+            </div>
+            <button onClick={runResilienceTest} disabled={experiment !== "idle" && experiment !== "done"}>{experiment === "idle" ? "run the experiment" : experiment === "done" ? "run it again" : "experiment running…"}<ArrowRight size={16} /></button>
+          </div>
+          <div className="raw-card"><div className="raw-head"><span><Braces size={15} /> raw trace</span><em>not uploaded</em></div><pre>{traceJson}</pre></div>
+        </div>
+        <a className="journey-next trace-next" href="#faultline">Continue into Faultline <ArrowDown size={16} /></a>
+      </section>
+
+      <section className="hero" id="faultline">
         <div className="hero-copy">
-          <div className="eyebrow"><Terminal size={14} /> distributed systems, without the whiteboard</div>
+          <div className="eyebrow"><span>03</span><Terminal size={14} /> distributed systems, without the whiteboard</div>
           <h1>Break the cluster.<br /><span>Watch it recover.</span></h1>
           <p>A hands-on failure lab for queues, workers, retries, and replication. Everything below is a live simulation running in your browser.</p>
           <div className="hero-actions">
@@ -147,7 +268,7 @@ export default function Home() {
           <div className="control-actions"><button onClick={() => setRunning((value) => !value)}>{running ? <CircleStop size={16} /> : <Play size={16} />}{running ? "pause" : "resume"}</button><button onClick={reset}><RotateCcw size={16} /> reset</button></div>
         </div>
       </section>
-      <footer><span>FAULTLINE / browser-based systems lab</span><span>designed and built by <a href="https://github.com/OmarHag">Omar Hagaley</a></span></footer>
+      <footer><span>REAL TIMINGS + LABELED SIMULATIONS / NO VISITOR DATA STORED</span><span>designed and built by <a href="https://github.com/OmarHag">Omar Hagaley</a></span></footer>
     </main>
   );
 }
@@ -157,4 +278,23 @@ function Metric({ label, value, detail, warning = false }: { label: string; valu
 }
 function PanelHeader({ icon, title, meta }: { icon: React.ReactNode; title: string; meta: string }) {
   return <div className="panel-head"><span>{icon}{title}</span><em>{meta}</em></div>;
+}
+function TraceStage({ label, value, detail }: { label: string; value?: number; detail: string }) {
+  return <div className="trace-stage"><small>{detail}</small><strong>{label}</strong><span>{value === undefined ? "measuring" : `${Math.round(value)} ms`}</span></div>;
+}
+function WaterfallRow({ label, value, max }: { label: string; value?: number; max?: number }) {
+  const width = value === undefined || max === undefined ? 0 : Math.max(value > 0 ? 2 : 0, Math.min(100, (value / Math.max(max, 1)) * 100));
+  return <div className="waterfall-row"><span>{label}</span><div><i style={{ width: `${width}%` }} /></div><b>{value === undefined ? "—" : `${Math.round(value)} ms`}</b></div>;
+}
+function TraceFact({ label, value }: { label: string; value: string }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
+}
+function ExperimentStep({ label, value, active, done, simulated = false }: { label: string; value: string; active: boolean; done: boolean; simulated?: boolean }) {
+  return <div className={`experiment-step ${active ? "active" : ""} ${done ? "done" : ""} ${simulated ? "simulated" : ""}`}><i /><span>{label}</span><strong>{value}</strong></div>;
+}
+function formatBytes(value?: number) {
+  if (value === undefined) return "—";
+  if (value === 0) return "cached";
+  if (value < 1024) return `${value} B`;
+  return `${(value / 1024).toFixed(1)} KB`;
 }
