@@ -1,32 +1,22 @@
-# Faultline
+# Omar's Workbench
 
-An interactive distributed-systems failure lab that runs entirely in the browser. Send a traffic burst, stop a worker, and watch queue pressure, retries, latency, health, and recovery change in real time.
+An interactive portfolio presented as Omar Hagaley's desk. Each object opens a real project, experiment, or piece of research; schematic mode reveals the engineering layer underneath.
 
-## Why it exists
+## What is on the desk
 
-Concepts such as backpressure, replication, rerouting, and idempotent retries are often explained with static diagrams. Faultline turns them into a small system you can break and observe.
+- **Internet X-Ray** — local-first macOS network-connection inspector. Work in progress.
+- **SuperDrop** — local-network device discovery prototype. Work in progress.
+- **Faultline** — browser-based distributed-systems failure simulation.
+- **ExplainMyCode** — UW capstone for structured, audience-aware code explanations.
+- **Research notes** — the documented distributed-systems result showing a 20% processing-time reduction.
 
-## What the simulation models
+The project descriptions intentionally distinguish finished behavior from planned work.
 
-```mermaid
-flowchart LR
-  R[Incoming requests] --> Q[Job queue]
-  Q --> W1[Worker 1]
-  Q --> W2[Worker 2]
-  Q --> W3[Worker 3]
-  W1 & W2 & W3 --> C[Replicated commit]
-  W1 -. failure .-> Q
-  Q -. retry + reroute .-> W2
-```
+## Interaction
 
-- A three-worker pool distributed across simulated regions.
-- Queue growth and draining based on available throughput.
-- Traffic bursts that trigger visible backpressure.
-- Worker failure, rerouting, recovery, and replicated-state rejoin.
-- Live availability, latency, completed-job, retry, CPU-load, and event displays.
-- Pause, resume, overload, failure-injection, and reset controls.
-
-This is an educational simulation, not a production benchmark or a connection to real infrastructure. The state machine is implemented in `app/page.tsx` and deliberately requires no account, API key, model, or backend service.
+- Select any desk object to open its project story, technical decisions, stack, and repository link.
+- Toggle **schematic mode** to switch from the physical desk to a systems-oriented blueprint view.
+- The layout becomes a readable project grid on tablets and phones.
 
 ## Run locally
 
@@ -46,9 +36,3 @@ npm run build
 ## Stack
 
 Next.js 15, React 19, TypeScript, CSS, and Lucide icons.
-
-## Current limitations
-
-- All cluster behavior is simulated in one browser tab.
-- Timing and load values illustrate system relationships; they are not benchmark results.
-- Refreshing the page resets the simulation.
